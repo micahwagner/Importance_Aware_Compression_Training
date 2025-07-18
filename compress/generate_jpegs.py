@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 
-def generate_jpegs(profiler_data, batches):
+def generateJPEGS(profiler_data, batches):
 	thresholds = profiler_data["thresholds"]
 
 	n_levels = len(thresholds) + 1
