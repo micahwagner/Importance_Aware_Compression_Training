@@ -69,7 +69,7 @@ def main():
 	scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 	epochs = 200
 
-	if sys.argv[1] == "profile":
+	if len(sys.argv) > 1 and sys.argv[1] == "profile":
 		batches = []
 		for i in range(1, 6):
 			batches.append(unpickle(f"{c10_route}data_batch_{i}"))

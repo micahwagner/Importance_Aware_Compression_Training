@@ -14,7 +14,7 @@ def train_model(
 	loss_per_epoch = []
 	accuracy_per_epoch = []
 	print(f"Training for {num_epochs} epochs")
-	for epoch in range(num_epochs):
+	for epoch in range(1, num_epochs + 1):
 		model.train()
 		losses = []
 		running_loss = 0
