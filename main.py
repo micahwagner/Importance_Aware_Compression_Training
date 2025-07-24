@@ -89,7 +89,6 @@ def main():
 		shifts_e, thresholds_e, accuracy_e = run_offline_profiler(losses_e, accuracy_e)
 		#generateJPEGS(profiler_data, batches)
 		#run compression
-		print(shifts_e, thresholds_e, accuracy_e)
 
 
 def unpickle(file):

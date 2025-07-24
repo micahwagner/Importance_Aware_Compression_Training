@@ -1,14 +1,20 @@
 import numpy as np
 from scipy.cluster.hierarchy import linkage
-from scipy.cluster.hierarchy import fcluster
+from sklearn.cluster import AgglomerativeClustering
 
 
 def run_offline_profiler(losses_per_epoch, accuracy_per_epoch):
 	thresholds_by_epoch = []
 	shift_factors = []
 
-	for epoch_losses in losses_per_epoch:
-		thresholds = cluster_losses(epoch_losses)
+	for idx, epoch_losses in enumerate(losses_per_epoch):
+		print(f"Clustering Epoch {idx}...")
+		max_sample_size = 10000
+		if len(epoch_losses) > max_sample_size:
+			sample = np.random.choice(epoch_losses, size=max_sample_size, replace=False).tolist()
+		else:
+			sample = epoch_losses
+		thresholds = cluster_losses(sample)
 		thresholds_by_epoch.append(thresholds)
 
 	natural_decrease = compute_natural_decrease(thresholds_by_epoch)
@@ -32,18 +38,35 @@ def cluster_losses(losses_per_epoch):
 	jumps = np.diff(merge_distances)
 	biggest_jump = np.argmax(jumps) 
 	K_opt = len(losses_per_epoch) - biggest_jump
+	print(f"optimal number of clusters: {K_opt}")
 
-	labels = fcluster(Z, t=K_opt, criterion='maxclust')
-	clusters = {}
-	for i, label in enumerate(labels):
-		clusters.setdefault(label, []).append(losses_per_epoch[i])
+	clustering = AgglomerativeClustering(n_clusters=K_opt, metric='euclidean', linkage='ward')
+	labels = clustering.fit_predict(X)
 
-	cluster_means = sorted(np.mean(v) for v in clusters.values())
+	optimal_unique_labels = np.unique(labels)
+	cluster_ranges = []
+	for cluster in optimal_unique_labels:
+	    cluster_values = X[labels == cluster]
+	    min_value = np.min(cluster_values)
+	    max_value = np.max(cluster_values)
+	    num_elements = cluster_values.shape[0]
+	    cluster_ranges.append({
+	        "cluster": cluster,
+	        "min_value": min_value,
+	        "max_value": max_value,
+	        "num_elements": num_elements
+	    })
+	
+	for idx, cluster in enumerate(cluster_ranges):
+		print(f"Cluster {idx}: Range = [{cluster['min_value']:.4f}, {cluster['max_value']:.4f}], Size = {cluster['num_elements']}")
+	
+	cluster_means = sorted((r["min_value"] + r["max_value"]) / 2 for r in cluster_ranges)
 	thresholds = []
 	for i in range(len(cluster_means) - 1):
 		mid = (cluster_means[i] + cluster_means[i+1]) / 2
 		thresholds.append(mid)
 
+	print(f" Thresholds: {['{:.4f}'.format(t) for t in thresholds]}")
 	return thresholds
 
 def compute_natural_decrease(thresholds_by_epoch):
