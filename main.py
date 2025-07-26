@@ -12,10 +12,11 @@ from torchvision.models import resnet18
 import json
 from importance.offline_profiler import run_offline_profiler
 from importance.train_runner import train_model
-from compress.generate_jpegs import generateJPEGS
+from compress.generate_jpegs import generateJPEGS, print_quality_sizes
+from dataloader.dynamic_dataset import CIFARCompressionDataset
 from torch.utils.data import DataLoader
 import sys
-
+from contextlib import redirect_stdout
 
 def main():
 	cifar_transform_train = transforms.Compose([
@@ -32,7 +33,9 @@ def main():
 
 
 	cifar_train = CIFAR10(root='./data/CIFAR10/', train=True, download=True, transform=cifar_transform_train)
+	train_labels = cifar_train.targets
 	cifar_test = CIFAR10(root='./data/CIFAR10', train=False, download=True, transform=cifar_transform_test)
+	test_labels = cifar_test.targets
 	c10_route = "./data/CIFAR10/cifar-10-batches-py/"
 
 	profiler_train_loader = DataLoader(
@@ -48,6 +51,26 @@ def main():
 		shuffle=True,
 		num_workers=4
 	)
+
+	train_indices = list(range(50000))
+	test_indices = list(range(50000, 60000))
+	all_labels = train_labels + test_labels
+
+	# train_dataset = CIFARCompressionDataset(
+	# 	root_dir="./data",
+	# 	indices=train_indices,
+	# 	mode="train",
+	# 	thresholds_by_epoch=thresholds,
+	# 	labels=all_labels
+	# )
+
+	# test_dataset = CIFARCompressionDataset(
+	# 	root_dir="./data",
+	# 	indices=test_indices,
+	# 	mode="test",
+	# 	thresholds_by_epoch=thresholds,
+	# 	labels=all_labels
+	# )
 
 	# NVIDIA and mac metal API are the easiest devices to check for
 	device = "cpu"
@@ -68,28 +91,52 @@ def main():
 	optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4, nesterov=True)
 	scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
 	epochs = 200
-
+	profile_epochs = 10
+	
+	batches = []
+	for i in range(1, 6):
+		batches.append(unpickle(f"{c10_route}data_batch_{i}"))
+	batches.append(unpickle(f"{c10_route}test_batch"))
+	
 	if len(sys.argv) > 1 and sys.argv[1] == "profile":
-		batches = []
-		for i in range(1, 6):
-			batches.append(unpickle(f"{c10_route}data_batch_{i}"))
-		batches.append(unpickle(f"{c10_route}test_batch"))
+		losses_per_epoch = []
+		loss_per_epoch = []
+		accuracy_per_epoch = []
+		print(f"Running profiler for {profile_epochs} epochs...")
+		for epoch in range(1, profile_epochs + 1):
+			losses, train_loss, test_loss, accuracy = train_model(
+				model,
+				profiler_train_loader,
+				profiler_test_loader,
+				criterion_no_reduction,
+				optimizer,
+				scheduler,
+				device,
+			)
 
-		losses_e, loss_e, accuracy_e = train_model(
-			model,
-			profiler_train_loader,
-			profiler_test_loader,
-			criterion_no_reduction,
-			optimizer,
-			scheduler,
-			device,
-			num_epochs=10
-		)
+			losses_per_epoch.append(losses)
+			loss_per_epoch.append(train_loss)
+			accuracy_per_epoch.append(accuracy)
 
-		shifts_e, thresholds_e, accuracy_e = run_offline_profiler(losses_e, accuracy_e)
-		#generateJPEGS(profiler_data, batches)
-		#run compression
+			if epoch % 5 == 0:
+				print("Epoch " + str(epoch) + " training loss: " + str(train_loss))
+				print("Epoch " + str(epoch) + " testing loss: " + str(test_loss))
 
+		with open("profiler_output.log", "w") as f:
+			with redirect_stdout(f):
+				shifts_e, thresholds_e, accuracy_e = run_offline_profiler(losses_per_epoch, accuracy_per_epoch)
+		
+		profiler_output = {
+			'thresholds': thresholds_e,
+			'shift_factors': shifts_e,
+			'baseline_test_acc': accuracy_e
+		}
+
+		with open('profiler_output.json', 'w') as f:
+			json.dump(profiler_output, f)
+
+		generateJPEGS(profiler_output, batches)
+		print_quality_sizes()
 
 def unpickle(file):
 	with open(file, 'rb') as fo:
