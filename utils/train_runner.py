@@ -33,6 +33,7 @@ def train_model(
 	total = 0
 	test_steps = 0
 	running_loss = 0
+	model.eval()
 	with torch.no_grad():
 		for x, y in test_loader:
 			x, y = x.to(device), y.to(device)

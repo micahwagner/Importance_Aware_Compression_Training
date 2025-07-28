@@ -11,9 +11,10 @@ from torchvision import transforms
 from torchvision.models import resnet18
 import json
 from importance.offline_profiler import run_offline_profiler
-from importance.train_runner import train_model
 from compress.generate_jpegs import generateJPEGS, print_quality_sizes
 from dataloader.dynamic_dataset import CIFARCompressionDataset
+from utils.eval import test_best_model
+from utils.train_runner import train_model
 from torch.utils.data import DataLoader
 import sys
 from contextlib import redirect_stdout
@@ -52,26 +53,6 @@ def main():
 		num_workers=4
 	)
 
-	train_indices = list(range(50000))
-	test_indices = list(range(50000, 60000))
-	all_labels = train_labels + test_labels
-
-	# train_dataset = CIFARCompressionDataset(
-	# 	root_dir="./data",
-	# 	indices=train_indices,
-	# 	mode="train",
-	# 	thresholds_by_epoch=thresholds,
-	# 	labels=all_labels
-	# )
-
-	# test_dataset = CIFARCompressionDataset(
-	# 	root_dir="./data",
-	# 	indices=test_indices,
-	# 	mode="test",
-	# 	thresholds_by_epoch=thresholds,
-	# 	labels=all_labels
-	# )
-
 	# NVIDIA and mac metal API are the easiest devices to check for
 	device = "cpu"
 	if(torch.backends.mps.is_available()):
@@ -86,12 +67,14 @@ def main():
 	model.fc = nn.Linear(model.fc.in_features, 10)
 	model = model.to(device)
 
-	# train model expects reduction = none
+	# train model expects reduction = none to get losses per sample (no average)
 	criterion_no_reduction = nn.CrossEntropyLoss(reduction='none')
+	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4, nesterov=True)
 	scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
-	epochs = 200
-	profile_epochs = 10
+	num_epochs = 200
+	# for now we set them equal, dont use shift factors yet
+	profile_epochs = num_epochs
 	
 	batches = []
 	for i in range(1, 6):
@@ -137,6 +120,89 @@ def main():
 
 		generateJPEGS(profiler_output, batches)
 		print_quality_sizes()
+
+	train_indices = list(range(50000))
+	test_indices = list(range(50000, 60000))
+	all_labels = train_labels + test_labels
+
+	with open("profiler_output.json", "r") as f:
+		p_data = json.load(f)
+
+	train_dataset = CIFARCompressionDataset(
+		root_dir="./data",
+		indices=train_indices,
+		mode="train",
+		thresholds_by_epoch=p_data["thresholds"],
+		labels=all_labels
+	)
+
+	test_dataset = CIFARCompressionDataset(
+		root_dir="./data",
+		indices=test_indices,
+		mode="test",
+		labels=all_labels
+	)
+	
+	print(f"Training for {num_epochs} epochs...")
+	# high enough base for running on high quality
+	train_loss_per_epoch = []
+	test_loss_per_epoch = []
+	losses = [100.0] * 60000
+	min_loss = float('inf')
+	best_epoch = 0
+
+	# dataset prints compression dist, it has to append
+	# this clears the file before we start appending
+	open("./data/compression_distribution.txt", "w").close()
+
+	for epoch in range(1, num_epochs + 1):
+		# -1 because we are indexing losses
+		train_dataset.set_epoch(epoch-1, losses)
+	
+		train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
+		test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4)
+	
+		train_losses, train_loss_avg, test_loss_avg, _ = train_model(
+			model,
+			train_loader,
+			test_loader,
+			criterion_no_reduction,
+			optimizer,
+			scheduler,
+			device,
+		)
+
+		train_loss_per_epoch.append(train_loss_avg)
+		test_loss_per_epoch.append(test_loss_avg)
+		
+		if epoch % 5 == 0:
+				print("Epoch " + str(epoch) + " training loss: " + str(train_loss_avg))
+				print("Epoch " + str(epoch) + " testing loss: " + str(test_loss_avg))
+		
+		if test_loss_avg < min_loss:
+				min_loss = test_loss_avg
+				best_epoch = epoch
+				torch.save(model.state_dict(), './best_model')
+
+		losses = train_losses
+
+	train_dataset.set_epoch(best_epoch-1, losses)
+	train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
+	test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4)
+	
+	test_best_model(
+		model_path="./best_model",
+		model=model,
+		device=device,
+		train_loader=train_loader,
+		test_loader=test_loader,
+		criterion=criterion,
+		losses=train_loss_per_epoch,
+		test_losses=test_loss_per_epoch,
+		epochs=num_epochs,
+		best_epoch=best_epoch,
+		file_name="results/cifar",
+	)
 
 def unpickle(file):
 	with open(file, 'rb') as fo:

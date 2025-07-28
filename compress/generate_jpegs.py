@@ -14,6 +14,7 @@ def generateJPEGS(profiler_data, batches):
 	print(f"Detected cluster counts: {sorted(cluster_counts)}")
 	# for now quality will be a quadratic scale factor (prevents lower clusters from having subtle quality drop)
 	# this will probably change since thresholds can contain unequal number of samples
+	cluster_to_qualities = {}
 	for k in cluster_counts:
 		qualities = nonlinear_qualities(k, gamma=2.0)
 		qualities[-1] = 100  # ensure top quality is 100
