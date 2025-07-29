@@ -119,7 +119,10 @@ def main():
 			json.dump(profiler_output, f)
 
 		generateJPEGS(profiler_output, batches)
-		print_quality_sizes()
+
+	with open("./data/compression_sizes.log", "w") as f:
+		with redirect_stdout(f):
+			print_quality_sizes()
 
 	train_indices = list(range(50000))
 	test_indices = list(range(50000, 60000))
@@ -128,19 +131,28 @@ def main():
 	with open("profiler_output.json", "r") as f:
 		p_data = json.load(f)
 
+	mode = "cluster"
+	fixed_quality=None
+	manual_thresholds=None
 	train_dataset = CIFARCompressionDataset(
 		root_dir="./data",
 		indices=train_indices,
 		mode="train",
 		thresholds_by_epoch=p_data["thresholds"],
-		labels=all_labels
+		labels=all_labels,
+		compression_mode=compression_mode,
+		manual_thresholds=manual_thresholds,
+		fixed_quality=fixed_quality
 	)
 
 	test_dataset = CIFARCompressionDataset(
 		root_dir="./data",
 		indices=test_indices,
 		mode="test",
-		labels=all_labels
+		labels=all_labels,
+		compression_mode=compression_mode,
+		manual_thresholds=manual_thresholds,
+		fixed_quality=fixed_quality
 	)
 	
 	print(f"Training for {num_epochs} epochs...")
@@ -151,13 +163,18 @@ def main():
 	min_loss = float('inf')
 	best_epoch = 0
 
-	# dataset prints compression dist, it has to append
-	# this clears the file before we start appending
-	open("./data/compression_distribution.txt", "w").close()
+    file_tag = f"{mode}"
+    if mode == "fixed":
+        file_tag += f"_q{fixed_quality}"
+    elif mode == "manual":
+        file_tag += "_" + "-".join(f"{t:.1f}" for t in manual_thresholds)
 
+    out_dir = os.path.join("results", file_tag)
+    os.makedirs(out_dir, exist_ok=True)
+	
 	for epoch in range(1, num_epochs + 1):
-		# -1 because we are indexing losses
-		train_dataset.set_epoch(epoch-1, losses)
+
+		train_dataset.set_epoch(epoch, losses)
 	
 		train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
 		test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4)
@@ -182,16 +199,16 @@ def main():
 		if test_loss_avg < min_loss:
 				min_loss = test_loss_avg
 				best_epoch = epoch
-				torch.save(model.state_dict(), './best_model')
+				torch.save(model.state_dict(), './best_model.pth')
 
 		losses = train_losses
 
-	train_dataset.set_epoch(best_epoch-1, losses)
+	train_dataset.set_epoch(best_epoch, losses)
 	train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
 	test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4)
 	
 	test_best_model(
-		model_path="./best_model",
+		model_path="./best_model.pth",
 		model=model,
 		device=device,
 		train_loader=train_loader,
@@ -200,8 +217,7 @@ def main():
 		losses=train_loss_per_epoch,
 		test_losses=test_loss_per_epoch,
 		epochs=num_epochs,
-		best_epoch=best_epoch,
-		file_name="results/cifar",
+		best_epoch=best_epoch
 	)
 
 def unpickle(file):

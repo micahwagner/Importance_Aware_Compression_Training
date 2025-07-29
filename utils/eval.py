@@ -1,10 +1,14 @@
 import torch
 import matplotlib.pyplot as plt
 import os
+import numpy as np
 
-def test_best_model(model_path, model, device, train_loader, test_loader, criterion, losses, test_losses, epochs, best_epoch, file_name="results/cifar"):
+def test_best_model(model_path, model, device, train_loader, test_loader, criterion, losses, test_losses, epochs, best_epoch):
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
+    dataset = getattr(train_loader, 'dataset', None)
+    mode = getattr(dataset, 'compression_mode', 'unknown')
+    file_name = os.path.join(out_dir, "summary")
 
     def evaluate(dataloader):
         correct = total = count = 0
@@ -25,7 +29,7 @@ def test_best_model(model_path, model, device, train_loader, test_loader, criter
 
     train_loss, train_acc = evaluate(train_loader)
     test_loss, test_acc = evaluate(test_loader)
-
+    torch.save(model.state_dict(), os.path.join(out_dir, "best_model.pth"))
     print("\n--- Best Model Evaluation ---")
     print(f"Best Epoch: {best_epoch}")
     print(f"Training Loss: {train_loss:.4f}")
@@ -41,6 +45,11 @@ def test_best_model(model_path, model, device, train_loader, test_loader, criter
         f.write(f"Testing  Loss: {test_loss:.4f}\n")
         f.write(f"Training Accuracy: {train_acc:.2f}%\n")
         f.write(f"Testing  Accuracy: {test_acc:.2f}%\n")
+        f.write(f"Compression method: {mode}\n")
+        if mode == "fixed":
+            f.write(f"Fixed quality: q{dataset.fixed_quality}\n")
+        elif mode == "manual":
+            f.write(f"Manual thresholds: {dataset.manual_thresholds}\n")
 
     # Save plot
     plt.plot(range(1, epochs+1), losses, linestyle='--', label='Training Loss')
@@ -51,3 +60,8 @@ def test_best_model(model_path, model, device, train_loader, test_loader, criter
     plt.ylabel('Cross Entropy')
     plt.title(f'ResNet18 on CIFAR-10')
     plt.savefig(file_name + ".pdf")
+    np.savez(
+        os.path.join(out_dir, "loss_data.npz"),
+        train=np.array(losses),
+        val=np.array(test_losses)
+    )
