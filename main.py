@@ -142,7 +142,8 @@ def main():
 		labels=all_labels,
 		compression_mode=compression_mode,
 		manual_thresholds=manual_thresholds,
-		fixed_quality=fixed_quality
+		fixed_quality=fixed_quality,
+		log_dir=out_dir
 	)
 
 	test_dataset = CIFARCompressionDataset(
@@ -152,7 +153,8 @@ def main():
 		labels=all_labels,
 		compression_mode=compression_mode,
 		manual_thresholds=manual_thresholds,
-		fixed_quality=fixed_quality
+		fixed_quality=fixed_quality,
+		log_dir=out_dir
 	)
 	
 	print(f"Training for {num_epochs} epochs...")
@@ -210,6 +212,7 @@ def main():
 	test_best_model(
 		model_path="./best_model.pth",
 		model=model,
+		out_dir=out_dir,
 		device=device,
 		train_loader=train_loader,
 		test_loader=test_loader,
