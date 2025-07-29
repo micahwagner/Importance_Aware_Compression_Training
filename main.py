@@ -21,15 +21,15 @@ from contextlib import redirect_stdout
 
 def main():
 	cifar_transform_train = transforms.Compose([
-		# transforms.RandomCrop(32, padding=4),
-		# transforms.RandomHorizontalFlip(),
+		transforms.RandomCrop(32, padding=4),
+		transforms.RandomHorizontalFlip(),
 		transforms.ToTensor(),
-		# transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
+		transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
 	])
 
 	cifar_transform_test = transforms.Compose([
 		transforms.ToTensor(),
-		# transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
+		transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
 	])
 
 
@@ -178,8 +178,8 @@ def main():
 
 		train_dataset.set_epoch(epoch, losses)
 	
-		train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
-		test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4)
+		train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4, transform=cifar_transform_train)
+		test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4, transform=cifar_transform_test)
 	
 		train_losses, train_loss_avg, test_loss_avg, _ = train_model(
 			model,
