@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 from torch.utils.data import Dataset
-from compress.generate_jpegs import nonlinear_qualities
+from compress.generate_jpegs import skew_low_qualities
 from torchvision import transforms
 from collections import Counter
 
@@ -12,17 +12,19 @@ class CIFARCompressionDataset(Dataset):
 		indices,
 		labels,
 		mode,
+		log_dir,
+		transform,
 		thresholds_by_epoch=None,
 		fixed_test_quality=100,
 		compression_mode="cluster",    # "fixed", "manual", or "cluster"
 		fixed_quality=None,            # used if compression_mode == "fixed"
-		manual_thresholds=None,        # used if compression_mode == "manual"
-		log_dir
+		manual_thresholds=None         # used if compression_mode == "manual"
 	):
 		self.root_dir = root_dir
 		self.indices = indices
 		self.labels = labels
 		self.mode = mode
+		self.transform = transform
 		self.thresholds_by_epoch = thresholds_by_epoch
 		self.losses_per_epoch = []
 		self.current_epoch = 0
@@ -35,7 +37,7 @@ class CIFARCompressionDataset(Dataset):
 		self.log_path = os.path.join(self.log_dir, "compression_distribution.txt")
 		# dataset prints compression dist, it has to append
 		# this clears the file before we start appending
-		open(log_path, "w").close()
+		open(self.log_path, "w").close()
 
 	def set_epoch(self, epoch, losses):
 		self.current_epoch = epoch - 1
@@ -71,7 +73,7 @@ class CIFARCompressionDataset(Dataset):
 		)
 
 		image = Image.open(image_path).convert("RGB")
-		image = transforms.ToTensor()(image)
+		image = self.transform(image)
 		label = self.labels[global_idx]
 		return image, label
 
@@ -92,5 +94,5 @@ class CIFARCompressionDataset(Dataset):
 			if c == cluster_count - 1 or loss < thresholds[c]:
 				break
 
-		quality_levels = nonlinear_qualities(cluster_count, gamma=2.0)
+		quality_levels = skew_low_qualities(cluster_count, gamma=2.0)
 		return quality_levels[c]

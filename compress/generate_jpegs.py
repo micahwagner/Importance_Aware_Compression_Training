@@ -4,8 +4,18 @@ import numpy as np
 
 jpeg_root = "./data"
 
-def nonlinear_qualities(n_levels, gamma=2.0):
-	return [round(100 * ((i + 1) / n_levels) ** gamma) for i in range(n_levels)]
+def skew_low_qualities(n_levels, gamma=2.0):
+	qualities = [round(100 * ((i + 1) / n_levels) ** gamma) for i in range(n_levels)]
+	qualities[-1] = 100
+	return qualities
+
+def skew_high_qualities(n_levels, min_quality=25, gamma=3.0):
+	qualities =  [
+        round(min_quality + (100 - min_quality) * (1 - ((n_levels - i - 1) / n_levels) ** gamma))
+        for i in range(n_levels)
+	]
+	qualities[-1] = 100
+	return qualities
 
 def generateJPEGS(profiler_data, batches):
 	thresholds = profiler_data["thresholds"]
@@ -16,8 +26,7 @@ def generateJPEGS(profiler_data, batches):
 	# this will probably change since thresholds can contain unequal number of samples
 	cluster_to_qualities = {}
 	for k in cluster_counts:
-		qualities = nonlinear_qualities(k, gamma=2.0)
-		qualities[-1] = 100  # ensure top quality is 100
+		qualities = skew_high_qualities(k)
 		cluster_to_qualities[k] = qualities
 		print(f"Cluster count {k} → JPEG qualities: {qualities}")
 
@@ -57,10 +66,15 @@ def get_folder_size(path):
 	return total
 
 def print_quality_sizes():
-	for name in os.listdir(jpeg_root):
-		if name.startswith("jpeg_q") and os.path.isdir(os.path.join(jpeg_root, name)):
-			q_path = os.path.join(jpeg_root, name)
-			for split in ["train", "test"]:
-				split_path = os.path.join(q_path, split)
-				size = get_folder_size(split_path)
-				print(f"{name}/{split}: {size / 1e6:.2f} MB")
+	jpeg_dirs = [
+		name for name in os.listdir(jpeg_root)
+		if name.startswith("jpeg_q") and os.path.isdir(os.path.join(jpeg_root, name))
+	]
+
+	jpeg_dirs = sorted(jpeg_dirs, key=lambda x: int(x.split("_q")[1]))
+	for name in jpeg_dirs:
+		q_path = os.path.join(jpeg_root, name)
+		for split in ["train", "test"]:
+			split_path = os.path.join(q_path, split)
+			size = get_folder_size(split_path)
+			print(f"{name}/{split}: {size / 1e6:.2f} MB")

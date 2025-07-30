@@ -17,6 +17,7 @@ from utils.eval import test_best_model
 from utils.train_runner import train_model
 from torch.utils.data import DataLoader
 import sys
+import os
 from contextlib import redirect_stdout
 
 def main():
@@ -134,27 +135,40 @@ def main():
 	mode = "cluster"
 	fixed_quality=None
 	manual_thresholds=None
+	fixed_test_quality=100
+
+	file_tag = f"{mode}"
+	if mode == "fixed":
+		file_tag += f"_q{fixed_quality}"
+	elif mode == "manual":
+		file_tag += "_" + "-".join(f"{t:.1f}" for t in manual_thresholds)
+
+	out_dir = os.path.join("results", file_tag)
+	os.makedirs(out_dir, exist_ok=True)
 	train_dataset = CIFARCompressionDataset(
 		root_dir="./data",
 		indices=train_indices,
 		mode="train",
+		transform=cifar_transform_train,
 		thresholds_by_epoch=p_data["thresholds"],
 		labels=all_labels,
-		compression_mode=compression_mode,
+		log_dir=out_dir,
+		compression_mode=mode,
 		manual_thresholds=manual_thresholds,
-		fixed_quality=fixed_quality,
-		log_dir=out_dir
+		fixed_quality=fixed_quality
 	)
 
 	test_dataset = CIFARCompressionDataset(
 		root_dir="./data",
 		indices=test_indices,
 		mode="test",
+		transform=cifar_transform_test,
 		labels=all_labels,
-		compression_mode=compression_mode,
+		log_dir=out_dir,
+		compression_mode=mode,
 		manual_thresholds=manual_thresholds,
 		fixed_quality=fixed_quality,
-		log_dir=out_dir
+		fixed_test_quality=fixed_test_quality
 	)
 	
 	print(f"Training for {num_epochs} epochs...")
@@ -164,22 +178,14 @@ def main():
 	losses = [100.0] * 60000
 	min_loss = float('inf')
 	best_epoch = 0
-
-    file_tag = f"{mode}"
-    if mode == "fixed":
-        file_tag += f"_q{fixed_quality}"
-    elif mode == "manual":
-        file_tag += "_" + "-".join(f"{t:.1f}" for t in manual_thresholds)
-
-    out_dir = os.path.join("results", file_tag)
-    os.makedirs(out_dir, exist_ok=True)
+	best_model_path = os.path.join(out_dir, './best_model.pth')
 	
 	for epoch in range(1, num_epochs + 1):
 
 		train_dataset.set_epoch(epoch, losses)
 	
-		train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4, transform=cifar_transform_train)
-		test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4, transform=cifar_transform_test)
+		train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=4)
+		test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4)
 	
 		train_losses, train_loss_avg, test_loss_avg, _ = train_model(
 			model,
@@ -201,7 +207,7 @@ def main():
 		if test_loss_avg < min_loss:
 				min_loss = test_loss_avg
 				best_epoch = epoch
-				torch.save(model.state_dict(), './best_model.pth')
+				torch.save(model.state_dict(), best_model_path)
 
 		losses = train_losses
 
@@ -210,7 +216,7 @@ def main():
 	test_loader = DataLoader(test_dataset, batch_size=10000, shuffle=True, num_workers=4)
 	
 	test_best_model(
-		model_path="./best_model.pth",
+		model_path=best_model_path,
 		model=model,
 		out_dir=out_dir,
 		device=device,

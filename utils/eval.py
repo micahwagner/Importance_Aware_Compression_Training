@@ -29,7 +29,7 @@ def test_best_model(model_path, model, out_dir, device, train_loader, test_loade
 
     train_loss, train_acc = evaluate(train_loader)
     test_loss, test_acc = evaluate(test_loader)
-    torch.save(model.state_dict(), os.path.join(out_dir, "best_model.pth"))
+
     print("\n--- Best Model Evaluation ---")
     print(f"Best Epoch: {best_epoch}")
     print(f"Training Loss: {train_loss:.4f}")
