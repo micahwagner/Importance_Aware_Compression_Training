@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 from torch.utils.data import Dataset
-from compress.generate_jpegs import skew_low_qualities
+from compress.generate_jpegs import skew_low_qualities, skew_high_qualities
 from torchvision import transforms
 from collections import Counter
 
@@ -75,7 +75,7 @@ class CIFARCompressionDataset(Dataset):
 		image = Image.open(image_path).convert("RGB")
 		image = self.transform(image)
 		label = self.labels[global_idx]
-		return image, label
+		return image, label, global_idx
 
 	def _get_quality(self, global_idx):
 		if self.compression_mode == "fixed":
@@ -94,5 +94,5 @@ class CIFARCompressionDataset(Dataset):
 			if c == cluster_count - 1 or loss < thresholds[c]:
 				break
 
-		quality_levels = skew_low_qualities(cluster_count, gamma=2.0)
+		quality_levels = skew_high_qualities(cluster_count)
 		return quality_levels[c]

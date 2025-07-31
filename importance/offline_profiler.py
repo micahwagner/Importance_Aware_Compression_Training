@@ -46,25 +46,27 @@ def cluster_losses(losses_per_epoch):
 	optimal_unique_labels = np.unique(labels)
 	cluster_ranges = []
 	for cluster in optimal_unique_labels:
-	    cluster_values = X[labels == cluster]
-	    min_value = np.min(cluster_values)
-	    max_value = np.max(cluster_values)
-	    num_elements = cluster_values.shape[0]
-	    cluster_ranges.append({
-	        "cluster": cluster,
-	        "min_value": min_value,
-	        "max_value": max_value,
-	        "num_elements": num_elements
-	    })
-	
+		cluster_values = X[labels == cluster]
+		min_value = np.min(cluster_values)
+		max_value = np.max(cluster_values)
+		num_elements = cluster_values.shape[0]
+		cluster_ranges.append({
+			"cluster": cluster,
+			"min_value": min_value,
+			"max_value": max_value,
+			"num_elements": num_elements
+		})
+		
+	cluster_ranges = sorted(cluster_ranges, key=lambda r: r["min_value"])
 	for idx, cluster in enumerate(cluster_ranges):
 		print(f"Cluster {idx}: Range = [{cluster['min_value']:.4f}, {cluster['max_value']:.4f}], Size = {cluster['num_elements']}")
 	
-	cluster_means = sorted((r["min_value"] + r["max_value"]) / 2 for r in cluster_ranges)
 	thresholds = []
-	for i in range(len(cluster_means) - 1):
-		mid = (cluster_means[i] + cluster_means[i+1]) / 2
-		thresholds.append(mid)
+	for i in range(len(cluster_ranges) - 1):
+		prev_max = cluster_ranges[i]["max_value"]
+		next_min = cluster_ranges[i + 1]["min_value"]
+		threshold = (prev_max + next_min) / 2
+		thresholds.append(threshold)
 
 	print(f" Thresholds: {['{:.4f}'.format(t) for t in thresholds]}")
 	return thresholds

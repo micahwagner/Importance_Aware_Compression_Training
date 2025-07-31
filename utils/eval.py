@@ -14,7 +14,7 @@ def test_best_model(model_path, model, out_dir, device, train_loader, test_loade
         correct = total = count = 0
         total_loss = 0.0
         with torch.no_grad():
-            for imgs, labels in dataloader:
+            for imgs, labels, global_indices in dataloader:
                 imgs, labels = imgs.to(device), labels.to(device)
                 outputs = model(imgs)
                 loss = criterion(outputs, labels).cpu().detach().item()
