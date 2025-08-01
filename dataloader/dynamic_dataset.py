@@ -47,6 +47,10 @@ class CIFARCompressionDataset(Dataset):
 			assignments = [self._get_quality(i) for i in self.indices]
 			counts = Counter(assignments)
 
+			if self.compression_mode == "cluster":
+				self.clusters = list(counts.items())
+				self.new_clusters, self.promotion_map = self._promote_clusters(self.clusters)
+				counts = Counter(dict(self.new_clusters)) 
 			# must append since dataset is running in parallel
 			with open(self.log_path, "a") as f:
 				f.write(f"Epoch {epoch} compression distribution:\n")
@@ -62,6 +66,8 @@ class CIFARCompressionDataset(Dataset):
 
 		if self.mode == "train":
 			quality = self._get_quality(global_idx)
+			if self.compression_mode == "cluster":
+				quality = self.promotion_map[self._get_quality(global_idx)]
 		else:
 			quality = self.fixed_test_quality
 
@@ -95,4 +101,32 @@ class CIFARCompressionDataset(Dataset):
 				break
 
 		quality_levels = skew_high_qualities(cluster_count)
+
 		return quality_levels[c]
+
+	def _promote_clusters(self, cs, min_percent=0.01):
+		cs = sorted(cs, key=lambda x: x[0], reverse=True)
+		buckets = [[q,0] for q, _ in cs]
+		buckets = sorted(buckets, key=lambda x: x[0])
+		current_bucket = len(buckets) - 1
+		total = sum(value for _, value in cs)
+		min_cluster_size = total * min_percent
+		promotion_map = {}
+
+		for cluster in cs:
+			if buckets[current_bucket][1] >= min_cluster_size:
+				current_bucket -= 1
+
+			buckets[current_bucket][1] += cluster[1]
+			promotion_map[cluster[0]] = buckets[current_bucket][0]
+
+		if current_bucket < len(buckets) - 1 and buckets[current_bucket][1] < min_cluster_size:
+			buckets[current_bucket + 1][1] += buckets[current_bucket][1]
+			buckets[current_bucket][1] = 0
+			promotion_map[buckets[current_bucket][0]] = buckets[current_bucket + 1][0]
+
+		return buckets, promotion_map
+
+
+			
+
