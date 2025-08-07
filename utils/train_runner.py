@@ -65,7 +65,7 @@ def train_model(
 	test_loss_avg = running_loss/test_steps
 	
 	if not profiler:
-		losses = [loss_map.get(i, 100.0) for i in range(50000)]
+		losses = [loss_map.get(i, 100.0) for i in range(len(train_loader.dataset))]
 	else:
 		losses = [float(l) for l in loss_map]
 	return losses, train_loss_avg, test_loss_avg, accuracy

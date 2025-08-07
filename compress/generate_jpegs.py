@@ -1,39 +1,30 @@
 from PIL import Image
 import os
 import numpy as np
+from utils.q_mapings import skew_low_qualities, skew_high_qualities
 
 jpeg_root = "./data"
 
-def skew_low_qualities(n_levels, gamma=2.0):
-	qualities = [round(100 * ((i + 1) / n_levels) ** gamma) for i in range(n_levels)]
-	qualities[-1] = 100
-	return qualities
 
-def skew_high_qualities(n_levels, min_quality=25, gamma=3.0):
-	qualities =  [
-        round(min_quality + (100 - min_quality) * (1 - ((n_levels - i - 1) / n_levels) ** gamma))
-        for i in range(n_levels)
-	]
-	qualities[-1] = 100
-	return qualities
-
-def generateJPEGS(profiler_data, batches):
+def generateCIFAR10_JPEGS(profiler_data, batches, compression_array=None):
 	thresholds = profiler_data["thresholds"]
 
 	cluster_counts = set(len(thresh) + 1 for thresh in thresholds)
 	print(f"Detected cluster counts: {sorted(cluster_counts)}")
 	# for now quality will be a quadratic scale factor (prevents lower clusters from having subtle quality drop)
 	# this will probably change since thresholds can contain unequal number of samples
-	cluster_to_qualities = {}
+	cluster_to_qualities = set()
 	for k in cluster_counts:
-		qualities = skew_high_qualities(k)
-		cluster_to_qualities[k] = qualities
-		print(f"Cluster count {k} → JPEG qualities: {qualities}")
+		if compression_array == None:
+			cluster_to_qualities.update(skew_high_qualities(k))
+		else:
+			cluster_to_qualities.update(compression_array)
+		print(f"Cluster count {k} → JPEG qualities: {cluster_to_qualities}")
 
+	cluster_to_qualities = list(cluster_to_qualities)
 
 	img_idx = 0
 	split_point = 50000 
-	compressed_100 = False
 	# each batch is 10000x3072 (firs dimension being an image)
 	for batch in batches:
 		data = batch[b"data"]
@@ -42,19 +33,14 @@ def generateJPEGS(profiler_data, batches):
 			img = data[i].reshape(3, 32, 32).transpose(1, 2, 0)
 			img = Image.fromarray(img)
 
-			for k, quality_levels in cluster_to_qualities.items():
-				for q in quality_levels:
-					if q == 100 and compressed_100:
-						continue
-					split = "train" if img_idx < split_point else "test"
-					out_dir = f"./data/jpeg_q{q}/{split}"
-					os.makedirs(out_dir, exist_ok=True)
-					out_path = os.path.join(out_dir, f"{img_idx:05d}.jpg")
-					img.save(out_path, quality=q)
-				compressed_100 = True
-			compressed_100 = False
+			for q in cluster_to_qualities:
+				split = "train" if img_idx < split_point else "test"
+				out_dir = f"./data/jpeg_q{q}/{split}"
+				os.makedirs(out_dir, exist_ok=True)
+				out_path = os.path.join(out_dir, f"{img_idx:05d}.jpg")
+				img.save(out_path, quality=q)
 			img_idx += 1
-	print(f"Done. Saved {img_idx} images × {sum(len(v)-1 for v in cluster_to_qualities.values())} total variants.")
+	print(f"Done. Saved {img_idx} images × {len(cluster_to_qualities)} total variants.")
 
 def get_folder_size(path):
 	total = 0

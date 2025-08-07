@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 
-def test_best_model(model_path, model, out_dir, device, train_loader, test_loader, criterion, losses, test_losses, epochs, best_epoch):
+def test_model(model_path, model, out_dir, device, train_loader, test_loader, criterion, losses, test_losses, epochs, best_epoch):
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
     dataset = getattr(train_loader, 'dataset', None)
